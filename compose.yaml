@@ -1,0 +1,21 @@
+services:
+  somewhere:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PORT: "3000"
+      DATA_DIR: /data
+    volumes:
+      - somewhere-world:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=16m
+    mem_limit: 256m
+volumes:
+  somewhere-world:
