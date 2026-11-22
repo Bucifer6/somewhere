@@ -1,3 +1,5 @@
+import { addCreativeMoment } from "./creative-play.js";
+
 export const WORLD_VERSION = 1;
 
 export function initialWorld(seed = 1847, now = Date.now()) {
@@ -61,5 +63,5 @@ export function advanceWorld(world, now = Date.now()) {
     });
     next.events = next.events.slice(0, 200);
   }
-  return next;
+  return addCreativeMoment(next);
 }
