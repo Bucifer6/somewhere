@@ -4,13 +4,13 @@ This milestone reuses the existing durable `TaskQueue`, approval gate, consumed-
 
 ## Offline operator report
 
-After the reviewed PR is merged, operators with authorised root access can run this with Node 22 installed on the host or via a separately reviewed, **read-only** Node container that can inspect the operator state directories:
+After the reviewed PR is merged, run the command under root on a suitably privileged host **or**, preferably for the Docker deployment, under the real unprivileged owner of `/var/lib/somewhere-agent` and its `state` directory. This avoids bypassing directory access checks. The report checks the effective UID against both owners before reading files:
 
 ```sh
 node control/operations-cli.js
 ```
 
-The CLI has no arguments and refuses non-root execution. It inspects:
+The CLI has no arguments and refuses identities other than root or the owner of both the private agent home and state directories. It also rejects directories writable by others. It inspects:
 
 - the real STOP file at `/var/lib/somewhere-agent/state/STOP`, including fail-closed missing/invalid states
 - task metadata by existing queue state: queued, reserved, completed, failed (up to 20 IDs per state; no task prompts)
@@ -38,3 +38,31 @@ No agent scheduling, paid AI calls, autonomous execution, deployment, GitHub wri
 ## Tests
 
 Run `npm test`; tests include normal reporting, fail-closed STOP, malformed private task data, insecure directory permissions, URL allowlisting and unavailable health reporting.
+
+## Capability-dropped Docker invocation (preferred)
+
+The previous `--cap-drop ALL` root container was unable to traverse the private agent directories: a Docker UID 0 process is not magically authorized to bypass filesystem DAC checks after capabilities are dropped. A reported `unavailable-fail-closed` STOP state means **not observable**, not absent.
+
+Use the dedicated agent's numeric account identity, without granting Linux capabilities. The source and state are mounted read-only. The root-private approval directory is deliberately **not mounted** and its report entry is expected to remain unavailable. No approval data is needed to verify STOP and the task queue.
+
+```sh
+cd /opt/somewhere/source
+umask 022
+# Ensure the source code is readable by the dedicated agent before running:
+# verify with: namei -l /opt/somewhere/source/control/operations-cli.js
+
+docker run --rm \
+  --user "$(id -u somewhere-agent):$(id -g somewhere-agent)" \
+  --network host \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --mount type=bind,src=/opt/somewhere/source,dst=/app,readonly \
+  --mount type=bind,src=/var/lib/somewhere-agent/state,dst=/var/lib/somewhere-agent/state,readonly \
+  --workdir /app \
+  --entrypoint node \
+  node:22-alpine \
+  control/operations-cli.js
+```
+
+If the queue is still inaccessible, inspect ownership and path permissions with `namei -l`, and confirm the relevant directories are actually owned by `somewhere-agent`. Do **not** run recursive `chmod`, loosen task/STOP permissions, add `CAP_DAC_OVERRIDE`, or mount root secrets. Never treat an unavailable state report as a green security check.
