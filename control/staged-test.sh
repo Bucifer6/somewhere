@@ -11,7 +11,7 @@ if [[ ! -d "$SOURCE/.git" ]]; then
   echo "Not a Git checkout: $SOURCE" >&2
   exit 2
 fi
-if [[ -n "$(git -C "$SOURCE" status --porcelain)" ]]; then
+if [[ -n "$(runuser -u somewhere-agent -- git -C "$SOURCE" status --porcelain)" ]]; then
   echo "Refusing dirty checkout" >&2
   exit 2
 fi
@@ -19,7 +19,7 @@ STAGING="$(mktemp -d /tmp/somewhere-verify.XXXXXXXX)"
 cleanup() { rm -rf -- "$STAGING"; }
 trap cleanup EXIT
 # git archive omits all untracked files, local keys, .env and agent state.
-git -C "$SOURCE" archive HEAD | tar -x -C "$STAGING"
+runuser -u somewhere-agent -- git -C "$SOURCE" archive HEAD | tar -x -C "$STAGING"
 chown -R 65534:65534 "$STAGING"
 chmod 0700 "$STAGING"
 # Only the staged copy is mounted, never the private checkout or host state.
