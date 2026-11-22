@@ -16,5 +16,25 @@ function draw(){
  if(world){world.inhabitants.forEach((p,i)=>{const x=p.x*10+Math.sin(frame/90+i)*3,y=p.y*5.6+Math.cos(frame/100+i)*3;ellipse(x,y+4,6,3,"#6c8668");ellipse(x,y,5,7,["#f2d3a0","#e9baa4","#c5d9cc"][i%3]);});const darkness=world.hour<6||world.hour>19?.34:.03;ctx.fillStyle=`rgba(9,20,42,${darkness})`;ctx.fillRect(0,0,1000,560);}
  requestAnimationFrame(draw);
 }
-async function refresh(){try{const r=await fetch("/api/world",{cache:"no-store"});if(!r.ok)throw Error("World unavailable");world=await r.json();document.querySelector("#clock").textContent=`DAY ${world.day} · ${String(world.hour).padStart(2,"0")}:00 · ${world.season.toUpperCase()}`;document.querySelector("#status").textContent=`${world.inhabitants.length} inhabitants · ${world.settlements.length} settlement · ${world.tick} simulated hours`;document.querySelector("#events").replaceChildren(...world.events.slice(0,6).map(e=>{const li=document.createElement("li");li.textContent=e.text;return li;}));}catch(e){document.querySelector("#status").textContent="The world is temporarily sleeping.";}}
+async function refresh(){try{const r=await fetch("/api/world",{cache:"no-store"});if(!r.ok)throw Error("World unavailable");world=await r.json();document.querySelector("#clock").textContent=`DAY ${world.day} · ${String(world.hour).padStart(2,"0")}:00 · ${world.season.toUpperCase()}`;document.querySelector("#status").textContent=`${world.inhabitants.length} inhabitants · ${world.settlements.length} settlement · ${world.tick} simulated hours`;document.querySelector("#events").replaceChildren(...world.events.slice(0,6).map(e=>{const li=document.createElement("li");li.textContent=e.text;return li;}));const names=new Map(world.inhabitants.map(p=>[p.id,p.name]));
+const projects=Array.isArray(world.projects)?world.projects:[];
+const projectNodes=projects.slice(-3).reverse().map(p=>{
+  const item=document.createElement("div");item.className="world-project";
+  const title=document.createElement("strong");title.textContent=p.name;
+  const detail=document.createElement("p");
+  detail.textContent=p.completedDay!==null&&p.completedDay!==undefined
+    ? `Completed on day ${p.completedDay} · A village dream made real`
+    : `${p.progress} of ${p.goal} steps · ${Array.isArray(p.contributors)?p.contributors.length:0} contributors`;
+  const meter=document.createElement("progress");meter.max=Math.max(1,p.goal);meter.value=Math.min(p.goal,Math.max(0,p.progress));meter.setAttribute("aria-label",`Progress of ${p.name}`);
+  item.append(title,detail,meter);return item;
+});
+document.querySelector("#projects")?.replaceChildren(...(projectNodes.length?projectNodes:[document.createTextNode("The village is dreaming up its first project.")]));
+const bonds=(Array.isArray(world.relationships)?world.relationships:[]).slice().sort((a,b)=>b.strength-a.strength||b.lastDay-a.lastDay).slice(0,5);
+const friendshipNodes=bonds.map(b=>{
+  const p=document.createElement("p");p.className="friendship";
+  p.textContent=`${b.people.map(id=>names.get(id)??"Someone").join(" & ")} · ${["","New friends","Growing close","Good friends","Kindred spirits","Inseparable"][Math.max(1,Math.min(5,b.strength))]}`;
+  return p;
+});
+document.querySelector("#friendships")?.replaceChildren(...(friendshipNodes.length?friendshipNodes:[document.createTextNode("Friendships are beginning to form.")]));
+}catch(e){document.querySelector("#status").textContent="The world is temporarily sleeping.";}}
 draw();refresh();setInterval(refresh,30000);

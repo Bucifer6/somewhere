@@ -1,4 +1,5 @@
 import { addCreativeMoment } from "./creative-play.js";
+import { advanceSocialLife } from "./social-life.js";
 
 export const WORLD_VERSION = 1;
 
@@ -63,5 +64,5 @@ export function advanceWorld(world, now = Date.now()) {
     });
     next.events = next.events.slice(0, 200);
   }
-  return addCreativeMoment(next);
+  return addCreativeMoment(advanceSocialLife(next));
 }
