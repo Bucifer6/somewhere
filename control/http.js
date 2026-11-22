@@ -13,6 +13,7 @@ import { dispatch } from "./mcp.js";
 
 const MAX_BODY = 64 * 1024;
 const METHODS = new Set(["POST", "GET", "DELETE"]);
+const AUDITABLE_TOOLS = new Set(["somewhere_health", "somewhere_world", "somewhere_roadmap", "somewhere_diagnostics", "somewhere_project_status"]);
 
 function constantTimeEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
@@ -103,7 +104,9 @@ export function createControlServer({ token, allowedOrigins = [], audit = () => 
         return respond(res, 400, errorBody(-32600, "Invalid request"));
       }
       const out = await dispatch(msg);
-      finish(200, typeof msg.method === "string" ? msg.method : "unknown");
+      const action = msg.method === "tools/call" && AUDITABLE_TOOLS.has(msg.params?.name)
+        ? "tools/call:" + msg.params.name : typeof msg.method === "string" ? msg.method : "unknown";
+      finish(200, action);
       // MCP JSON-RPC notifications must not produce JSON-RPC responses.
       if (out === null || msg.id === undefined) {
         res.writeHead(202, { "cache-control": "no-store" });
@@ -133,7 +136,7 @@ export function parseControlConfig(env = process.env) {
 if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
   try {
     const cfg = parseControlConfig();
-    const server = createControlServer(cfg);
+    const server = createControlServer({ ...cfg, audit: event => console.error(JSON.stringify({ type: "mcp_audit", ...event })) });
     server.listen(cfg.port, cfg.host, () => console.error("Somewhere Control MCP bound to loopback on port " + cfg.port));
   } catch (err) {
     console.error(err.message);
