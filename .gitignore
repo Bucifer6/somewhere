@@ -3,3 +3,12 @@ data/
 .env
 *.log
 .DS_Store
+
+# Somewhere Control private runtime state and credentials
+control-data/
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
