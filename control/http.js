@@ -105,7 +105,7 @@ export function createControlServer({ token, allowedOrigins = [], audit = () => 
       }
       const out = await dispatch(msg);
       const action = msg.method === "tools/call" && AUDITABLE_TOOLS.has(msg.params?.name)
-        ? "tools/call:" + msg.params.name : typeof msg.method === "string" ? msg.method : "unknown";
+        ? "tools/call:" + msg.params.name : ["initialize", "ping", "tools/list", "tools/call", "notifications/initialized"].includes(msg.method) ? msg.method : "unknown";
       finish(200, action);
       // MCP JSON-RPC notifications must not produce JSON-RPC responses.
       if (out === null || msg.id === undefined) {
