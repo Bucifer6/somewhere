@@ -11,8 +11,12 @@ This milestone hardens the approval lifecycle without enabling any paid or unatt
 
 ## Important compatibility and access notes
 
-The previous Control 0.9 `approval-cli.js` writes only the `approval` object. It does **not** yet write a full `{packet,approval}` bundle. The new consumption module is intentionally a non-operational foundation until the CLI and operator review are updated together. Do not attempt to use root approval files to make provider calls.
+The Control 1.0 `approval-cli.js` now writes `{packet,approval}` bundles, and `one-shot-cli.js` accepts only those private root-owned files. `preview` validates without consuming; `run-offline` atomically consumes an approval and writes an **offline simulated** development preview. The consumer preserves the consumed marker permanently even on an error. This is not yet a paid execution workflow.
 
 The approval file must stay root-private; do not mount it, the GitHub App key or AI provider credentials into the normal agent worker. The project still needs a dedicated operator-owned runtime, provider usage reconciliation, spending limits, authentication and repeatable recovery tests before a first billable request. The persistent STOP remains engaged.
 
 Reviewing a file or accepting a proposal must never implicitly activate paid AI, merge a pull request or deploy.
+
+## Operator commands (only after VPS checkout is updated)
+
+The VPS host currently uses Docker for Node.js. These commands require a dedicated operator-only Node 22 runtime with the expected private filesystem mounts, not a public web container. Do not grant GitHub private keys or OpenAI credentials to that runtime. `approval-cli.js review` prints a task fingerprint; `approve FINGERPRINT` writes the full root-only bundle; `one-shot-cli.js preview APPROVAL_FILE` checks it; and `one-shot-cli.js run-offline APPROVAL_FILE` burns it to create a simulated plan. The approval expires after fifteen minutes. These commands never send network requests and do not dequeue the live task. Do not remove STOP.
