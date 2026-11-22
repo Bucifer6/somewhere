@@ -78,7 +78,9 @@ export async function writePrivateApproval(approval,outputDir) {
   const dir=resolve(outputDir);
   if (dir!=="/root/somewhere-approvals")throw Error("Unapproved output directory");
   await mkdir(dir,{recursive:true,mode:0o700});
-  const destination=join(dir,approval.approvalId+".json");
+  const id=approval.approval?.approvalId ?? approval.approvalId;
+  if (!UUID.test(id??""))throw Error("Invalid approval ID");
+  const destination=join(dir,id+".json");
   const handle=await open(destination,"wx",0o600);
   try { await handle.writeFile(JSON.stringify(approval,null,2)+"\n"); }
   finally { await handle.close(); }
