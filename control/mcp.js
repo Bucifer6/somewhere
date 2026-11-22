@@ -11,15 +11,43 @@ if (!ALLOWED_BASE.test(BASE_URL)) {
 const tools = [
   {name:"somewhere_health",description:"Read the Somewhere simulation health (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
   {name:"somewhere_world",description:"Read a snapshot of the Somewhere world state (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
-  {name:"somewhere_roadmap",description:"Read project roadmap from the deployed repository (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}}
+  {name:"somewhere_roadmap",description:"Read project roadmap from the deployed repository (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
+  {name:"somewhere_diagnostics",description:"Check live simulation health and world invariants without modifying them (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
+  {name:"somewhere_project_status",description:"Read deployed project version and control-plane capability boundaries (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}}
 ];
+async function readEndpoint(endpoint) {
+  const res = await fetch(BASE_URL + endpoint, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw Error("World API HTTP " + res.status);
+  return (await res.text()).slice(0, 100000);
+}
 async function invoke(name) {
+  if (name === "somewhere_project_status") {
+    const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    return JSON.stringify({
+      project: "somewhere", deployedSourceVersion: manifest.version, controlApi: "read-only",
+      permissions: { shell: false, taskMutations: false, deployments: false, stopOverride: false },
+      autonomousDeveloperStop: "not_observable_from_control_container",
+      note: "STOP must be verified separately on the VPS."
+    });
+  }
+  if (name === "somewhere_diagnostics") {
+    const [healthRaw, worldRaw] = await Promise.all([readEndpoint("/api/health"), readEndpoint("/api/world")]);
+    const health = JSON.parse(healthRaw);
+    const world = JSON.parse(worldRaw);
+    const inhabitants = Array.isArray(world.inhabitants) ? world.inhabitants : [];
+    const settlements = Array.isArray(world.settlements) ? world.settlements : [];
+    const checks = {
+      healthy: health.status === "ok",
+      tickConsistent: Number.isSafeInteger(health.tick) && health.tick === world.tick,
+      uniqueInhabitantIds: inhabitants.every(p => typeof p?.id === "string") && new Set(inhabitants.map(p => p.id)).size === inhabitants.length,
+      validSettlementPopulation: settlements.every(p => Number.isSafeInteger(p.population) && p.population >= 0)
+    };
+    return JSON.stringify({ status: Object.values(checks).every(Boolean) ? "pass" : "fail", checks, tick: world.tick, day: world.day, hour: world.hour, inhabitants: inhabitants.length, settlements: settlements.length });
+  }
   if (name === "somewhere_roadmap") return (await readFile(new URL("../docs/ROADMAP.md",import.meta.url),"utf8")).slice(0,20000);
   if (name !== "somewhere_health" && name !== "somewhere_world") throw Error("Unknown tool");
   const endpoint = name === "somewhere_health" ? "/api/health" : "/api/world";
-  const res=await fetch(BASE_URL + endpoint,{signal:AbortSignal.timeout(5000)});
-  if (!res.ok) throw Error("World API HTTP " + res.status);
-  return (await res.text()).slice(0,100000);
+  return readEndpoint(endpoint);
 }
 function write(message){process.stdout.write(JSON.stringify(message)+"\n");}
 export async function dispatch(msg) {
