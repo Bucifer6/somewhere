@@ -67,12 +67,12 @@ test("world failure cannot be mistaken for deployment verification",async()=>fix
 import { authorizeSnapshotIdentity } from "../control/operations-cli.js";
 
 test("private agent owner can read status without root capabilities", () => {
-  assert.equal(authorizeSnapshotIdentity(998,998,998), "agent-owner-read-only");
-  assert.equal(authorizeSnapshotIdentity(0,998,998), "root-operator");
+  assert.equal(authorizeSnapshotIdentity(998,998), "agent-owner-read-only");
+  assert.equal(authorizeSnapshotIdentity(0,998), "root-operator");
 });
 
 test("a non-owner or mismatched state owner is denied", () => {
-  assert.throws(() => authorizeSnapshotIdentity(999,998,998), /Operator-only/);
-  assert.throws(() => authorizeSnapshotIdentity(998,998,999), /Operator-only/);
-  assert.throws(() => authorizeSnapshotIdentity(-1,998,998), /Invalid execution UID/);
+  assert.throws(() => authorizeSnapshotIdentity(999,998), /Operator-only/);
+  assert.throws(() => authorizeSnapshotIdentity(998,999), /Operator-only/);
+  assert.throws(() => authorizeSnapshotIdentity(-1,998), /Invalid execution UID/);
 });
