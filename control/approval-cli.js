@@ -26,7 +26,7 @@ async function main() {
   if (!process.argv[3] || process.argv[3]!==packet.taskSha256)
     throw Error("Explicit task fingerprint confirmation required: review again");
   const approval=approvalFor(packet,task);
-  const path=await writePrivateApproval(approval,"/root/somewhere-approvals");
+  const path=await writePrivateApproval({packet,approval},"/root/somewhere-approvals");
   console.log(JSON.stringify({status:"APPROVED_METADATA_ONLY_NO_API_CALL",
     taskId:task.id,approvalFile:path,expiresAt:packet.expiresAt},null,2));
 }
