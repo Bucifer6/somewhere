@@ -13,7 +13,7 @@ import { dispatch } from "./mcp.js";
 
 const MAX_BODY = 64 * 1024;
 const METHODS = new Set(["POST", "GET", "DELETE"]);
-const AUDITABLE_TOOLS = new Set(["somewhere_health", "somewhere_world", "somewhere_roadmap", "somewhere_diagnostics", "somewhere_project_status"]);
+const AUDITABLE_TOOLS = new Set(["somewhere_health", "somewhere_world", "somewhere_roadmap", "somewhere_diagnostics", "somewhere_project_status", "somewhere_operations_status"]);
 
 function constantTimeEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;

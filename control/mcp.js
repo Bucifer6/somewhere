@@ -2,12 +2,14 @@
 // Minimal MCP stdio server. No inbound listener, no shell access, no mutation tools.
 import { createInterface } from "node:readline";
 import { readFile } from "node:fs/promises";
+import { validateOperationsClientConfig, fetchOperationsStatus } from "./operations-client.js";
 const BASE_URL = process.env.SOMEWHERE_INTERNAL_URL ?? "http://127.0.0.1:3000";
 const ALLOWED_BASE = /^http:\/\/(127\.0\.0\.1|localhost)(:\d{1,5})?$/;
 if (!ALLOWED_BASE.test(BASE_URL)) {
   console.error("SOMEWHERE_INTERNAL_URL must be a loopback HTTP address");
   process.exit(1);
 }
+const OPERATIONS_BRIDGE = validateOperationsClientConfig();
 const tools = [
   {name:"somewhere_health",description:"Read the Somewhere simulation health (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
   {name:"somewhere_world",description:"Read a snapshot of the Somewhere world state (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
@@ -15,12 +17,14 @@ const tools = [
   {name:"somewhere_diagnostics",description:"Check live simulation health and world invariants without modifying them (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
   {name:"somewhere_project_status",description:"Read deployed project version and control-plane capability boundaries (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}}
 ];
+if (OPERATIONS_BRIDGE) tools.push({name:"somewhere_operations_status",description:"Read private agent task counts, safe task metadata and verified STOP state (read-only; no approvals or execution)",inputSchema:{type:"object",properties:{},additionalProperties:false}});
 async function readEndpoint(endpoint) {
   const res = await fetch(BASE_URL + endpoint, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw Error("World API HTTP " + res.status);
   return (await res.text()).slice(0, 100000);
 }
 async function invoke(name) {
+  if (name === "somewhere_operations_status" && OPERATIONS_BRIDGE) return fetchOperationsStatus(OPERATIONS_BRIDGE);
   if (name === "somewhere_project_status") {
     const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
     return JSON.stringify({
