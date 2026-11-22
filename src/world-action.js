@@ -5,7 +5,7 @@ const ACTIONS=new Set(["create_event","introduce_character","start_project"]);
 const MAX_DAILY_ACTIONS=8;
 const MAX_TOTAL_ACTIONS=2048;
 const MAX_PEOPLE=32;
-const MAX_PROJECTS=20;
+const MAX_PROJECTS=12;
 const MAX_EVENTS=200;
 
 function safeText(value,max) {
