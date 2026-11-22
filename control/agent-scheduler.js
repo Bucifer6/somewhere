@@ -42,28 +42,80 @@ async function getProposal(task, config) {
   return text.slice(0,10000);
 }
 
-export async function runOnce({ queue, config, propose = getProposal, audit = appendAudit, isStopped = stopped, outputDir = join(BASE,"state","proposals") }) {
+export async function runOnce({
+  queue, config, propose = getProposal, audit = appendAudit,
+  isStopped = stopped, outputDir = join(BASE,"state","proposals"),
+  ledger = null, budgetPolicy = null
+}) {
   if (await isStopped()) { await audit({event:"stopped"}); return "stopped"; }
   if (!isEnabled(config)) { await audit({event:"disabled"}); return "disabled"; }
+
+  // Fail closed before claiming a task. Every potential paid provider call
+  // must first have a durable usage reservation; no optional bypass.
+  if (!ledger || typeof ledger.reserve !== "function" ||
+      typeof ledger.settle !== "function" || !budgetPolicy) {
+    await audit({event:"budget-unconfigured"});
+    return "budget-unconfigured";
+  }
+
   const task = await queue.reserve();
   if (!task) { await audit({event:"queue-empty"}); return "empty"; }
   await audit({event:"task-reserved",taskId:task.id,type:task.type});
-  // Check again immediately before the external call.
+
   if (await isStopped()) {
-    await queue.finish(task.id,"failed",{reason:"Emergency stop engaged before call"});
+    await queue.finish(task.id,"failed",{reason:"Emergency stop engaged before budget reservation"});
+    await audit({event:"stopped-before-budget",taskId:task.id});
     return "stopped";
   }
+
+  let reservation;
   try {
+    reservation = await ledger.reserve(budgetPolicy);
+  } catch (error) {
+    await queue.finish(task.id,"failed",{reason:"Budget ledger unavailable"});
+    await audit({event:"budget-ledger-error",taskId:task.id,errorClass:error.name});
+    throw error;
+  }
+
+  if (!reservation) {
+    await queue.finish(task.id,"failed",{reason:"Budget quota exhausted or disabled"});
+    await audit({event:"quota-exhausted",taskId:task.id});
+    return "quota-exhausted";
+  }
+
+  let completed = false;
+  try {
+    await audit({event:"budget-reserved",taskId:task.id,reservationId:reservation.id});
+    if (await isStopped()) {
+      await queue.finish(task.id,"failed",{reason:"Emergency stop engaged after budget reservation"});
+      await audit({event:"stopped-after-budget",taskId:task.id});
+      return "stopped";
+    }
     const result = await propose(task, config);
+    if (await isStopped()) {
+      await queue.finish(task.id,"failed",{reason:"Emergency stop engaged after provider call"});
+      await audit({event:"stopped-after-provider",taskId:task.id});
+      return "stopped";
+    }
     await mkdir(outputDir,{recursive:true,mode:0o700});
     await writeFile(join(outputDir,task.id+".txt"),result,{flag:"wx",mode:0o600});
     await queue.finish(task.id,"completed",{outputFile:task.id+".txt"});
+    completed = true;
     await audit({event:"task-completed",taskId:task.id});
     return "completed";
   } catch (error) {
-    await queue.finish(task.id,"failed",{reason:"Agent operation failed"});
+    // Never retry a potentially billable operation. If task completion has
+    // already succeeded, do not attempt to mark it failed after an audit error.
+    if (!completed) {
+      try { await queue.finish(task.id,"failed",{reason:"Agent operation failed"}); }
+      catch { /* the operator reconciles reserved tasks manually */ }
+    }
     await audit({event:"task-failed",taskId:task.id,errorClass:error.name});
     throw error;
+  } finally {
+    // Worst-case reservation remains charged even on error or STOP.
+    // If settlement fails, an unresolved reservation blocks month rollover.
+    await ledger.settle(reservation.id);
   }
 }
 

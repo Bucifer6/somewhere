@@ -57,7 +57,7 @@ test("emergency stop blocks work before task reservation",async()=>fixture(async
 test("enabled planner with injected provider creates proposal and audit",async()=>fixture(async(q,out)=>{
   await q.enqueue({type:"development-plan",prompt:"Draft a plan for safe tree growth simulation."});
   const events=[];
-  const result=await runOnce({queue:q,config:{enabled:"true",apiKey:"example",maxCalls:1,maxOutputTokens:100},audit:async e=>events.push(e),isStopped:async()=>false,propose:async()=> "A reviewed plan.",outputDir:out});
+  const result=await runOnce({queue:q,config:{enabled:"true",apiKey:"example",maxCalls:1,maxOutputTokens:100},audit:async e=>events.push(e),isStopped:async()=>false,propose:async()=> "A reviewed plan.",outputDir:out,ledger:{reserve:async()=>({id:"mock-reservation"}),settle:async()=>{}},budgetPolicy:{enabled:true,maxCallsPerDay:1,maxCallsPerMonth:2,maxEstimatedUsdPerMonth:1,worstCaseUsdPerCall:1}});
   assert.equal(result,"completed");
   assert.equal((await q.list("completed")).length,1);
   assert.ok(events.some(x=>x.event==="task-completed"));
