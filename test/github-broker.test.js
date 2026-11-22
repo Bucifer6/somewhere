@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, createPublicKey, verify } from "node:crypto";
+import { generateKeyPairSync, verify } from "node:crypto";
 import { githubAppJWT } from "../control/github-auth.js";
 import { createBroker, parseBrokerConfig } from "../control/github-broker.js";
 
@@ -12,7 +12,7 @@ test("JWT uses RS256 and has short expiration", () => {
   const claims=JSON.parse(Buffer.from(payload,"base64url"));
   assert.equal(claims.iss,"5874394");
   assert.ok(claims.exp-claims.iat<=600);
-  assert.ok(verify("RSA-SHA256",Buffer.from(head+"."+payload),createPublicKey(publicKey),Buffer.from(sig,"base64url")));
+  assert.ok(verify("RSA-SHA256",Buffer.from(head+"."+payload),publicKey,Buffer.from(sig,"base64url")));
 });
 
 test("broker refuses unapproved key or socket locations",()=>{
