@@ -8,20 +8,19 @@ import { operationsSnapshot } from "./operations-snapshot.js";
 const HOME = "/var/lib/somewhere-agent";
 const STATE = HOME + "/state";
 
-export function authorizeSnapshotIdentity(uid, homeOwner, stateOwner) {
+export function authorizeSnapshotIdentity(uid, stateOwner) {
   if (!Number.isSafeInteger(uid) || uid < 0) throw Error("Invalid execution UID");
   if (uid === 0) return "root-operator";
-  if (uid !== homeOwner || uid !== stateOwner) throw Error("Operator-only: use root or the owning somewhere-agent account");
+  if (uid !== stateOwner) throw Error("Operator-only: use root or the owning somewhere-agent account");
   return "agent-owner-read-only";
 }
 export async function validateOperatorIdentity(uid = process.getuid?.()) {
-  const [home, state] = await Promise.all([lstat(HOME), lstat(STATE)]);
-  if (!home.isDirectory() || home.isSymbolicLink() ||
-      !state.isDirectory() || state.isSymbolicLink() ||
-      (home.mode & 0o022) !== 0 || (state.mode & 0o022) !== 0) {
-    throw Error("Unsafe agent home/state ownership or permissions");
+  const state = await lstat(STATE);
+  if (!state.isDirectory() || state.isSymbolicLink() ||
+      (state.mode & 0o022) !== 0) {
+    throw Error("Unsafe agent state directory ownership or permissions");
   }
-  return authorizeSnapshotIdentity(uid, home.uid, state.uid);
+  return authorizeSnapshotIdentity(uid, state.uid);
 }
 
 async function main() {
