@@ -1,4 +1,6 @@
 import http from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { applyWorldAction } from "./world-action.js";
 import { readFile, mkdir, writeFile, rename } from "node:fs/promises";
 import { join, extname, resolve, sep } from "node:path";
 import { initialWorld, advanceWorld } from "./world.js";
@@ -10,6 +12,14 @@ const TICK_MS = 60_000;
 const STATE_FILE = join(DATA_DIR, "world.json");
 let world;
 let busy = false;
+const ACTION_TOKEN = process.env.SOMEWHERE_WORLD_ACTION_TOKEN;
+if (ACTION_TOKEN && (ACTION_TOKEN.length < 48 || ACTION_TOKEN.length > 256 || /\\s/.test(ACTION_TOKEN))) throw Error("Invalid creative action secret");
+function authorized(value) {
+  if (!ACTION_TOKEN || typeof value!=="string") return false;
+  const a=createHash("sha256").update(value).digest();
+  const b=createHash("sha256").update("Bearer "+ACTION_TOKEN).digest();
+  return timingSafeEqual(a,b);
+}
 
 async function saveWorld() {
   await mkdir(DATA_DIR, { recursive: true });
@@ -51,8 +61,36 @@ async function main() {
   await saveWorld();
   const server = http.createServer(async (req, res) => {
     try {
+      const url = new URL(req.url, "http://localhost");
+      const path = url.pathname;
+      // The creative write endpoint is opt-in, independently authenticated and never public.
+      if (path === "/internal/creative-action") {
+        if (!ACTION_TOKEN) return json(res, 404, { error: "Not found" });
+        if (url.search || req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+        if (req.headers.origin) return json(res, 403, { error: "Forbidden" });
+        if (!authorized(req.headers.authorization)) return json(res, 401, { error: "Unauthorized" });
+        if (req.headers["content-type"] !== "application/json") return json(res, 415, { error: "JSON required" });
+        if (busy) return json(res, 503, { error: "World busy; retry with the same requestId" });
+        busy=true;
+        try {
+          let total=0;const parts=[];
+          for await(const chunk of req){total+=chunk.length;if(total>4096)return json(res,413,{error:"Too large"});parts.push(chunk);}
+          let input;
+          try {input=JSON.parse(Buffer.concat(parts).toString("utf8"));}
+          catch {return json(res,400,{error:"Invalid JSON"});}
+          let change;
+          try {change=applyWorldAction(world,input);}
+          catch(error){return json(res,422,{error:error.message});}
+          if(change.world!==world){
+            const previous=world;world=change.world;
+            try {await saveWorld();}
+            catch {world=previous;return json(res,503,{error:"World persistence failed"});}
+          }
+          console.error(JSON.stringify({type:"creative_action_audit",action:change.result.action,requestId:change.result.requestId,status:change.result.status}));
+          return json(res,200,change.result);
+        }finally {busy=false;}
+      }
       if (!["GET", "HEAD"].includes(req.method)) return json(res, 405, { error: "Method not allowed" });
-      const path = new URL(req.url, "http://localhost").pathname;
       if (path === "/api/health") return json(res, 200, { status: "ok", tick: world.tick });
       if (path === "/api/world") return json(res, 200, world);
       await serveStatic(req, res, path === "/" ? "/index.html" : path);
