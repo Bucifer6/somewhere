@@ -1,7 +1,7 @@
 // Control 2.1: local operator-gated task intake. Never exported over MCP.
 // No worker execution, approval issuance, paid calls, GitHub writes or deployments.
 import { createHash, randomUUID } from "node:crypto";
-import { open, lstat, readdir, readFile, mkdir, appendFile, unlink } from "node:fs/promises";
+import { open, lstat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { TaskQueue, validateTask } from "./task-queue.js";
 
@@ -27,7 +27,7 @@ async function checkDirectory(path, uid) {
 }
 async function requireStop(stopPath, owner) {
   const stat = await lstat(stopPath);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== owner ||
+  if (!stat.isFile() || stat.isSymbolicLink() || (stat.uid !== owner && stat.uid !== 0) ||
       (stat.mode & 0o077) !== 0) throw Error("STOP missing or unsafe");
 }
 async function appendAudit(directory, record) {
