@@ -3,7 +3,7 @@
 set -euo pipefail
 printf 'Somewhere Secure MCP Tunnel prerequisites\n'
 printf 'Local MCP listener: '
-if curl -fsS --connect-timeout 2 --max-time 4 -o /dev/null \
+if curl -sS --connect-timeout 2 --max-time 4 -o /dev/null \
   -w '%{http_code}' -X POST \
   -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
