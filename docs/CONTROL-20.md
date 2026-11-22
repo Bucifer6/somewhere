@@ -4,13 +4,13 @@ This milestone reuses the existing durable `TaskQueue`, approval gate, consumed-
 
 ## Offline operator report
 
-After the reviewed PR is merged, run the command under root on a suitably privileged host **or**, preferably for the Docker deployment, under the real unprivileged owner of `/var/lib/somewhere-agent` and its `state` directory. This avoids bypassing directory access checks. The report checks the effective UID against both owners before reading files:
+After the reviewed PR is merged, run the command under root on a suitably privileged host **or**, preferably for the Docker deployment, under the real unprivileged owner of `/var/lib/somewhere-agent/state`. This avoids bypassing directory access checks. The report checks the effective UID against the mounted state directory owner before reading files:
 
 ```sh
 node control/operations-cli.js
 ```
 
-The CLI has no arguments and refuses identities other than root or the owner of both the private agent home and state directories. It also rejects directories writable by others. It inspects:
+The CLI has no arguments and refuses identities other than root or the owner of the mounted private agent state directory. It also rejects directories writable by others. It inspects:
 
 - the real STOP file at `/var/lib/somewhere-agent/state/STOP`, including fail-closed missing/invalid states
 - task metadata by existing queue state: queued, reserved, completed, failed (up to 20 IDs per state; no task prompts)
