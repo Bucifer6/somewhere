@@ -1,0 +1,20 @@
+# Example profile for OpenAI's official tunnel-client.
+# KEEP this example free of secrets. Replace tunnel_id in a root-private copy.
+# Never mount the Docker socket, world volume, GitHub App PEM or AI-worker state.
+config_version: 1
+control_plane:
+  tunnel_id: tunnel_REPLACE_WITH_PLATFORM_TUNNEL_ID
+  api_key: file:/etc/somewhere-tunnel/runtime-api-key
+mcp:
+  server_urls:
+    - channel: main
+      url: http://127.0.0.1:3100/mcp
+  extra_headers:
+    Authorization: file:/etc/somewhere-tunnel/mcp-authorization
+  discovery_extra_headers:
+    Authorization: file:/etc/somewhere-tunnel/mcp-authorization
+health:
+  listen_addr: 127.0.0.1:3808
+log:
+  level: info
+  format: json
