@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Minimal MCP stdio server. No inbound listener, no shell access, no mutation tools.
+// Minimal MCP stdio server. Read-only by default; optional bounded creative actions. No shell or deployment access.
 import { createInterface } from "node:readline";
 import { readFile } from "node:fs/promises";
 import { validateOperationsClientConfig, fetchOperationsStatus } from "./operations-client.js";
+import { validateWorldActionBridge, executeWorldAction } from "./world-action-client.js";
 const BASE_URL = process.env.SOMEWHERE_INTERNAL_URL ?? "http://127.0.0.1:3000";
 const ALLOWED_BASE = /^http:\/\/(127\.0\.0\.1|localhost)(:\d{1,5})?$/;
 if (!ALLOWED_BASE.test(BASE_URL)) {
@@ -10,6 +11,7 @@ if (!ALLOWED_BASE.test(BASE_URL)) {
   process.exit(1);
 }
 const OPERATIONS_BRIDGE = validateOperationsClientConfig();
+const CREATIVE_BRIDGE = validateWorldActionBridge();
 const tools = [
   {name:"somewhere_health",description:"Read the Somewhere simulation health (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
   {name:"somewhere_world",description:"Read a snapshot of the Somewhere world state (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}},
@@ -18,18 +20,20 @@ const tools = [
   {name:"somewhere_project_status",description:"Read deployed project version and control-plane capability boundaries (read-only)",inputSchema:{type:"object",properties:{},additionalProperties:false}}
 ];
 if (OPERATIONS_BRIDGE) tools.push({name:"somewhere_operations_status",description:"Read private agent task counts, safe task metadata and verified STOP state (read-only; no approvals or execution)",inputSchema:{type:"object",properties:{},additionalProperties:false}});
+if (CREATIVE_BRIDGE) tools.push({name:"somewhere_world_action",description:"Make a bounded creative change to fictional Somewhere (event, character or village project). World writing only; no code, deployment or STOP access. Pass a unique UUID requestId for safe retries.",inputSchema:{type:"object",properties:{action:{type:"string",enum:["create_event","introduce_character","start_project"]},requestId:{type:"string",format:"uuid"},title:{type:"string",maxLength:80},story:{type:"string",maxLength:400},name:{type:"string",maxLength:60},description:{type:"string",maxLength:250}},required:["action","requestId"],additionalProperties:false}});
 async function readEndpoint(endpoint) {
   const res = await fetch(BASE_URL + endpoint, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw Error("World API HTTP " + res.status);
   return (await res.text()).slice(0, 100000);
 }
-async function invoke(name) {
+async function invoke(name,args={}) {
+  if (name === "somewhere_world_action" && CREATIVE_BRIDGE) return executeWorldAction(CREATIVE_BRIDGE,args);
   if (name === "somewhere_operations_status" && OPERATIONS_BRIDGE) return fetchOperationsStatus(OPERATIONS_BRIDGE);
   if (name === "somewhere_project_status") {
     const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
     return JSON.stringify({
       project: "somewhere", deployedSourceVersion: manifest.version, controlApi: "read-only",
-      permissions: { shell: false, taskMutations: false, deployments: false, stopOverride: false },
+      permissions: { shell: false, taskMutations: false, deployments: false, stopOverride: false, creativeWorldActions: Boolean(CREATIVE_BRIDGE) },
       autonomousDeveloperStop: "not_observable_from_control_container",
       note: "STOP must be verified separately on the VPS."
     });
@@ -62,8 +66,10 @@ export async function dispatch(msg) {
   if (msg.method==="tools/list") return {jsonrpc:"2.0",id:msg.id,result:{tools}};
   if (msg.method==="tools/call") {
     try {
-      if (msg.params?.arguments && (typeof msg.params.arguments!=="object" || Object.keys(msg.params.arguments).length)) throw Error("Unexpected arguments");
-      const result=await invoke(msg.params?.name);
+      const args=msg.params?.arguments??{};
+      if (!args || typeof args!=="object" || Array.isArray(args) ||
+          (msg.params?.name!=="somewhere_world_action" && Object.keys(args).length)) throw Error("Unexpected arguments");
+      const result=await invoke(msg.params?.name,args);
       return {jsonrpc:"2.0",id:msg.id,result:{content:[{type:"text",text:result}]}};
     } catch(error) {
       return {jsonrpc:"2.0",id:msg.id,result:{content:[{type:"text",text:String(error.message)}],isError:true}};
