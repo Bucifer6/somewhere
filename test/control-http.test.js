@@ -33,7 +33,7 @@ test("MCP tool list requires a bearer token", async () => withServer(async base 
   const response = await request(base, TOKEN, body);
   assert.equal(response.status, 200);
   const data = await response.json();
-  assert.equal(data.result.tools.length, 3);
+  assert.equal(data.result.tools.length, 5);
 }));
 
 test("requests from unexpected origins are rejected even with a valid bearer token", async () => withServer(async base => {
@@ -46,3 +46,14 @@ test("command execution remains unavailable, events don't contain credentials", 
   assert.equal((await response.json()).error.code, -32601);
   assert.equal(JSON.stringify(events).includes(TOKEN), false);
 }));
+
+test("audit records only allowlisted tool names and do not include credentials", async () => withServer(async (base, events) => {
+  const response = await request(base, TOKEN, {jsonrpc:"2.0",id:8,method:"tools/call",params:{name:"somewhere_project_status",arguments:{}}});
+  assert.equal(response.status, 200);
+  assert.equal(events.at(-1).action, "tools/call:somewhere_project_status");
+  assert.equal(JSON.stringify(events).includes(TOKEN), false);
+  const unknown = await request(base, TOKEN, {jsonrpc:"2.0",id:9,method:"tools/call",params:{name:"untrusted-secret-value",arguments:{}}});
+  assert.equal(unknown.status, 200);
+  assert.equal(events.at(-1).action, "tools/call");
+  assert.equal(JSON.stringify(events).includes("untrusted-secret-value"), false);
+});
