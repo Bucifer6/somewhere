@@ -56,4 +56,4 @@ test("audit records only allowlisted tool names and do not include credentials",
   assert.equal(unknown.status, 200);
   assert.equal(events.at(-1).action, "tools/call");
   assert.equal(JSON.stringify(events).includes("untrusted-secret-value"), false);
-});
+}));
