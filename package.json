@@ -1,0 +1,14 @@
+{
+  "name": "somewhere",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "An evolving persistent digital world",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
