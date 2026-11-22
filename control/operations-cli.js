@@ -1,16 +1,39 @@
 #!/usr/bin/env node
-// Offline operator command; never exposed as an MCP tool.
-// Root-only because it inspects sensitive task and approval directories.
-// It cannot alter queue state, create approvals, execute tasks or deploy.
+// Offline operator command; never an MCP tool. No queue or approval mutations.
+// Root can run on a suitably privileged host; in a capability-dropped container,
+// use the actual owner of the private somewhere-agent home/state instead.
+import { lstat } from "node:fs/promises";
 import { operationsSnapshot } from "./operations-snapshot.js";
 
-try {
-  if (process.getuid?.() !== 0) throw Error("Operator-only: run as root");
+const HOME = "/var/lib/somewhere-agent";
+const STATE = HOME + "/state";
+
+export function authorizeSnapshotIdentity(uid, homeOwner, stateOwner) {
+  if (!Number.isSafeInteger(uid) || uid < 0) throw Error("Invalid execution UID");
+  if (uid === 0) return "root-operator";
+  if (uid !== homeOwner || uid !== stateOwner) throw Error("Operator-only: use root or the owning somewhere-agent account");
+  return "agent-owner-read-only";
+}
+export async function validateOperatorIdentity(uid = process.getuid?.()) {
+  const [home, state] = await Promise.all([lstat(HOME), lstat(STATE)]);
+  if (!home.isDirectory() || home.isSymbolicLink() ||
+      !state.isDirectory() || state.isSymbolicLink() ||
+      (home.mode & 0o022) !== 0 || (state.mode & 0o022) !== 0) {
+    throw Error("Unsafe agent home/state ownership or permissions");
+  }
+  return authorizeSnapshotIdentity(uid, home.uid, state.uid);
+}
+
+async function main() {
   if (process.argv.length !== 2) throw Error("No arguments supported");
+  const identity = await validateOperatorIdentity();
   const result = await operationsSnapshot();
-  console.log(JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ ...result, readerIdentity: identity }, null, 2));
   if (result.stop !== "engaged") process.exitCode = 2;
-} catch (error) {
-  console.error("Operator snapshot unavailable: " + error.message);
-  process.exitCode = 1;
+}
+if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
+  main().catch(error => {
+    console.error("Operator snapshot unavailable: " + error.message);
+    process.exitCode = 1;
+  });
 }
